@@ -16,9 +16,11 @@ let sections = {
     //'VIARegionaleConclusi': 100003,
     'VIARegionaleConclusi': 102925,
     //'VIARegionale2020': 120848,
-    //'ScreeningConclusi': 102920,
+    'VIARegionale2021': 124303,
+    'ScreeningConclusi': 102920,
     //'Screening2019': 116701,
-    //'Screening2020': 120849
+    //'Screening2020': 120849,
+    'Screening2021': 124304,
 }
 
 function VIALink(section, page=1) {
@@ -66,27 +68,33 @@ async function updateVIA(outputFile: string) {
                         if (entry) {
                             Object.assign(entry, {id, link, text, isNew: false })
                         } else {
-                            results[key].push({ id, link, text, isNew: true });                             
+                            results[key].unshift({ id, link, text, isNew: true });                             
                         }
                     }
                 })
+                const totalEntries = results[key].length;
                 for (let item of results[key]) {
-                    await sleep(100);
-                    const detail = await axios.get(item.link);
-                    const $ = cheerio.load(detail.data.toString());
-                    const subtitles = $('p.subtitle');
-                    item.subtitle = subtitles[0].children[0].data.trim().replace('\n', '\t');
-                    const long = $('div.long');
-                    item.description = long[0].children[0].data.trim().replace('\n', '\t');
-                    const _attachments = $('li', 'div.attachment');
-                    item.attachments = _.compact(_attachments.map( i => {
-                        const aTag = _attachments[i].children[1];
-                        if (aTag.attribs.href) {
-                            const text = aTag.children[0].data;
-                            const link = 'http://valutazioneambientale.regione.basilicata.it'+aTag.attribs.href;
-                            return { text, link };
-                        }
-                    }));
+                    const itemStr = JSON.stringify(item).toUpperCase();
+                    if ((/FOTOV/.test(itemStr) || /EOLIC/.test(itemStr)) && (!key.includes('Conclusi') || item.isNew)) {
+                        await sleep(100);
+                        const detail = await axios.get(item.link);
+                        const $ = cheerio.load(detail.data.toString());
+                        const subtitles = $('p.subtitle');
+                        item.subtitle = subtitles[0].children[0].data.trim().replace(/\n/g, '\t');
+                        const long = $('div.long');
+                        item.description = long[0].children[0].data.trim().replace(/\n/g, '\t');
+                        const _attachments = $('li', 'div.attachment');
+                        item.attachments = _.compact(_attachments.map( i => {
+                            const aTag = _attachments[i].children[1];
+                            if (aTag.attribs.href) {
+                                const text = aTag.children[0].data;
+                                const link = 'http://valutazioneambientale.regione.basilicata.it'+aTag.attribs.href;
+                                return { text, link };
+                            }
+                        }));    
+                        if (item.isNew)
+                            console.log(`[${key}] proc: ${item.id} - ${item.text} (${results[key].indexOf(item)}/${totalEntries})`);
+                    }
                 }
                 currentPage += 1;
             }    
